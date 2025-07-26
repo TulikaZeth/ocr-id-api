@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ID Extractor</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f5f7fa;
+      color: #333;
+      padding: 20px;
+      margin: 0;
+    }
+
+    h2 {
+      text-align: center;
+      color: #2c3e50;
+    }
+
+    .section {
+      background: #fff;
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.06);
+    }
+
+    h3 {
+      margin-top: 0;
+      color: #34495e;
+    }
+
+    input[type="file"], select {
+      padding: 8px;
+      margin-top: 8px;
+      margin-bottom: 10px;
+      width: 100%;
+      max-width: 300px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+
+    button {
+      background-color: #3498db;
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      margin: 6px 4px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    button:hover {
+      background-color: #2980b9;
+    }
+
+    video, canvas {
+      display: none;
+      width: 100%;
+      max-width: 320px;
+      height: auto;
+      margin-top: 10px;
+      border-radius: 10px;
+      border: 1px solid #ddd;
+    }
+
+    pre {
+      background-color: #f4f4f4;
+      padding: 15px;
+      border-radius: 8px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      font-size: 14px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: bold;
+    }
+
+    .loader {
+      border: 6px solid #f3f3f3;
+      border-top: 6px solid #3498db;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      display: none;
+      margin: 20px auto;
+    }
+
+    #loaderContainer {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    @media (min-width: 600px) {
+      video, canvas {
+        float: left;
+        margin-right: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <h2>ID Extractor</h2>
+
+  <!-- Upload from File -->
+  <div class="section">
+    <h3>1. Upload an Image</h3>
+    <input type="file" id="uploadInput" accept="image/*">
+    <br>
+    <button onclick="uploadImage()">Upload</button>
+  </div>
+
+  <!-- Click with Camera -->
+  <div class="section">
+    <h3>2. Click with Camera</h3>
+    <label for="cameraSelect">Choose Camera:</label>
+    <select id="cameraSelect">
+      <option value="user">Front (Selfie)</option>
+      <option value="environment">Back</option>
+    </select>
+    <br>
+    <button onclick="startCamera()">Start Camera</button>
+    <button onclick="capturePhoto()">Capture</button>
+    <button onclick="sendCaptured()">Send to Server</button>
+    <br>
+    <video id="video" autoplay></video>
+    <canvas id="canvas" width="320" height="240"></canvas>
+  </div>
+
+  <!-- Loader -->
+  <div id="loaderContainer">
+    <div id="loader" class="loader"></div>
+  </div>
+
+  <!-- Results -->
+  <div class="section">
+    <h3>Result</h3>
+    <pre id="result">Result will appear here...</pre>
+  </div>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const resultBox = document.getElementById('result');
+    const loader = document.getElementById('loader');
+    let currentStream = null;
+
+    function showLoader() {
+      loader.style.display = 'block';
+      resultBox.textContent = 'Processing...';
+    }
+
+    function hideLoader() {
+      loader.style.display = 'none';
+    }
+
+    function uploadImage() {
+      const fileInput = document.getElementById('uploadInput');
+      const file = fileInput.files[0];
+      if (!file) return alert("Please select an image.");
+
+      const formData = new FormData();
+      formData.append('image', file);
+
+      showLoader();
+
+      fetch('http://localhost:5000/api/extract-id', {
+        method: 'POST',
+        body: formData
+      })
+      .then(res => res.json())
+      .then(data => {
+        hideLoader();
+        resultBox.textContent = JSON.stringify(data, null, 2);
+      })
+      .catch(err => {
+        hideLoader();
+        resultBox.textContent = "Error: " + err;
+      });
+    }
+
+    function startCamera() {
+      const facingMode = document.getElementById('cameraSelect').value;
+      const constraints = {
+        video: { facingMode: { exact: facingMode } }
+      };
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+      }
+      navigator.mediaDevices.getUserMedia(constraints)
+        .then(stream => {
+          currentStream = stream;
+          video.style.display = 'block';
+          canvas.style.display = 'none';
+          video.srcObject = stream;
+        })
+        .catch(() => {
+          navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+              currentStream = stream;
+              video.style.display = 'block';
+              canvas.style.display = 'none';
+              video.srcObject = stream;
+            })
+            .catch(err2 => alert("Camera access denied: " + err2));
+        });
+    }
+
+    function capturePhoto() {
+      if (!video.srcObject) return alert("Camera not started.");
+      const context = canvas.getContext('2d');
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvas.style.display = 'block';
+    }
+
+    function sendCaptured() {
+      if (!canvas.toDataURL) return alert("No photo to send.");
+      const imageData = canvas.toDataURL('image/jpeg');
+
+      showLoader();
+
+      fetch('http://localhost:5000/api/extract-id-base64', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: imageData })
+      })
+      .then(res => res.json())
+      .then(data => {
+        hideLoader();
+        resultBox.textContent = JSON.stringify(data, null, 2);
+      })
+      .catch(err => {
+        hideLoader();
+        resultBox.textContent = "Error: " + err;
+      });
+    }
+  </script>
+
+</body>
+</html>
